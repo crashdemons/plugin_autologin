@@ -7,7 +7,6 @@ package plugin_autologin;
 import irtrusbot.*;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.lang.reflect.*;
 import java.util.Properties;
 
 /**
@@ -72,8 +71,11 @@ public class Plugin_autologin extends IrcPlugin {
         
         switch(event.type){
             case BOT_START:
+                System.out.println("getting session config");
                 getSessionConfig();
+                System.out.println("calling bot connect");
                 bot.connect();
+                System.out.println("should be connected");
                 break;
             case STATE:
                 if(event.state!=event.lastState)
@@ -95,13 +97,17 @@ public class Plugin_autologin extends IrcPlugin {
     public void getSessionConfig(){
         String server = config.getProperty("server","irc.freenode.net");
         int port = Integer.parseInt(config.getProperty("port","6667"));
-        session.setConnectionDetails(server, port);
+        if(session==null) System.out.println("Session null");
+        else session.setConnectionDetails(server, port);
         String nick=config.getProperty("nick");
         String user=config.getProperty("user");
         String realname=config.getProperty("realname");
         String password=config.getProperty("password");
-        session.setAccountDetails(nick,user,realname,password);
+        if(session==null)  System.out.println("Session null");
+        else session.setAccountDetails(nick,user,realname,password);
         String channelstr=config.getProperty("channels");
+        System.out.println(defaults.getProperty("channels"));
+        System.out.println(channelstr);
         channels=new ArrayList<String>(Arrays.asList(channelstr.split(",+")));
         doAutoJoin=Boolean.parseBoolean(config.getProperty("autojoin"));
         doAutoReconnect=Boolean.parseBoolean(config.getProperty("autoreconnect"));
@@ -109,6 +115,7 @@ public class Plugin_autologin extends IrcPlugin {
     
     
     public Plugin_autologin(){
+        System.out.println("Constructor called - setting defaults.");
         name="autologin";
         version="1.0-pre";
         description="Performs automatic connection, login, and channel join operations.";
@@ -123,10 +130,12 @@ public class Plugin_autologin extends IrcPlugin {
         defaults.setProperty("channels","#IrtrusBot,#cicada,##426699k");
         defaults.setProperty("autojoin","true");
         defaults.setProperty("autoreconnect","true");
-        
     }
     
     public static void main(String[] args) {
+        Plugin_autologin p = new Plugin_autologin();
+        p.config=new Properties(p.defaults);
+        p.getSessionConfig();
         // unused method
     }
     
