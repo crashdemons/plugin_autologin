@@ -147,7 +147,7 @@ public class Plugin_autologin extends IrcPlugin {
     
     public Plugin_autologin(){
         name="autologin";
-        version="1.0-pre";
+        version="1.0";
         description="Performs automatic connection, login, and channel join operations.";
         priority=IrcPluginPriority.RAW;
         
