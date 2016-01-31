@@ -24,39 +24,64 @@ public class Plugin_autologin extends IrcPlugin {
         event.direction=IrcDirection.SENDING;
         postEventNext(event);
     }
+    public void pong(String data){
+        IrcCommand ic = new IrcCommand("PONG :"+data);
+        IrcEvent event = new IrcEvent(IrcEventType.COMMAND,IrcState.UNDEFINED,IrcState.UNDEFINED,ic);
+        event.direction=IrcDirection.SENDING;
+        postEventNext(event);
+    }
+    public void im(String to,String text){
+        IrcMessage im = new IrcMessage(session.account,to,text);
+        IrcCommand ic = new IrcCommand(im.toOutgoing());
+        IrcEvent event = new IrcEvent(IrcEventType.COMMAND,IrcState.UNDEFINED,IrcState.UNDEFINED,ic);
+        event.direction=IrcDirection.SENDING;
+        postEventNext(event);
+    }
+    
     
     public IrcEventAction handleCommand(IrcEvent event,IrcState state,IrcCommand ic) throws Exception{
-        System.out.println(ic.type+" | STATE: "+state.toString());
+        if(ic.type.equals("PING")) pong(ic.parameters.get(0));
         if(state==IrcState.LOGIN_WAIT){
             IrcLoginState check = session.logincheck(ic);
-            System.out.println(ic.type+" | LOGINSTATE: "+check.toString());
             switch(check)
             {
                 case SUCCESS:
                     bot.updateState(IrcState.LOGGED_IN);
                     break;
                 case FAILURE:
+                    System.out.println("autologin: fatal response received - login failed");
                     bot.quit();
                     break;
             }
-            
+        }
+        if(session.isFatalCommand(ic)){
+            System.out.println("autologin: fatal command received - quitting.");
+            bot.quit();
         }
         return IrcEventAction.CONTINUE;
     }
     public IrcEventAction handleStateChange(IrcEvent event,IrcState state) throws Exception{
         switch(state){
             case CONNECTED:
+               System.out.println("autologin: connected - sending login information...");
                session.login();
                bot.updateState(IrcState.LOGIN_WAIT);
                break;
             case LOGGED_IN://TODO: send userinit to capture full origin string for self!
+                System.out.println("autologin: logged in.");
+                System.out.println("autologin: retrieving self origin string...");
+                im(session.account.nick,"++autologin-userinit++");
                 if(doAutoJoin){
+                    System.out.println("autologin: autojoining channels...");
                     for(String channel : channels) join(channel);
                     bot.updateState(IrcState.JOINED);
                 }
                 break;
             case DISCONNECTED:
-               if(doAutoReconnect) bot.connect();
+               if(doAutoReconnect){
+                   System.out.println("autologin: nonfatal disconnect - autoreconnecting...");
+                   bot.connect();
+               }
                break;
         }
         return IrcEventAction.CONTINUE;
@@ -66,16 +91,16 @@ public class Plugin_autologin extends IrcPlugin {
     @Override
     public IrcEventAction handleEvent(IrcEvent event) throws Exception
     {
-        if(event.type==IrcEventType.STATE && event.state==event.lastState) ;
-        else System.out.println("EVENT: "+event.type.toString()+" "+event.lastState.toString()+" "+event.state.toString());
+        //if(event.type==IrcEventType.STATE && event.state==event.lastState) ;
+        //else System.out.println("EVENT: "+event.type.toString()+" "+event.lastState.toString()+" "+event.state.toString());
         
         switch(event.type){
             case BOT_START:
-                System.out.println("getting session config");
+                System.out.println("autologin: getting session config");
                 getSessionConfig();
-                System.out.println("calling bot connect");
+                System.out.println("autologin: connecting...");
                 bot.connect();
-                System.out.println("should be connected");
+                System.out.println("autologin: connect finished");
                 break;
             case STATE:
                 if(event.state!=event.lastState)
@@ -83,9 +108,17 @@ public class Plugin_autologin extends IrcPlugin {
                 break;
             case COMMAND:
                 if(event.command!=null) return handleCommand(event,event.state,event.command);
-                else System.out.println("COMMAND NULL");
+                else System.out.println("autologin: null command received via event");
+                break;
+            case CHAT:
+                if(event.message.from.nick.equals(session.account.nick))
+                    if(event.message.text.equals("++autologin-userinit++")){
+                        session.account=event.message.from;
+                        System.out.println("autologin: updated self origin string");
+                    }
                 break;
             case BOT_STOP:
+                System.out.println("autologin: stop received - saving config and cleaning up...");
                 bot.session.disconnect();
                 saveConfig();
                 break;
@@ -97,17 +130,15 @@ public class Plugin_autologin extends IrcPlugin {
     public void getSessionConfig(){
         String server = config.getProperty("server","irc.freenode.net");
         int port = Integer.parseInt(config.getProperty("port","6667"));
-        if(session==null) System.out.println("Session null");
+        if(session==null) System.out.println("autologin: Session null during config load");
         else session.setConnectionDetails(server, port);
         String nick=config.getProperty("nick");
         String user=config.getProperty("user");
         String realname=config.getProperty("realname");
         String password=config.getProperty("password");
-        if(session==null)  System.out.println("Session null");
+        if(session==null)  System.out.println("autologin: Session null during config load");
         else session.setAccountDetails(nick,user,realname,password);
         String channelstr=config.getProperty("channels");
-        System.out.println(defaults.getProperty("channels"));
-        System.out.println(channelstr);
         channels=new ArrayList<String>(Arrays.asList(channelstr.split(",+")));
         doAutoJoin=Boolean.parseBoolean(config.getProperty("autojoin"));
         doAutoReconnect=Boolean.parseBoolean(config.getProperty("autoreconnect"));
@@ -115,7 +146,6 @@ public class Plugin_autologin extends IrcPlugin {
     
     
     public Plugin_autologin(){
-        System.out.println("Constructor called - setting defaults.");
         name="autologin";
         version="1.0-pre";
         description="Performs automatic connection, login, and channel join operations.";
