@@ -16,6 +16,7 @@ import java.util.Properties;
 public class Plugin_autologin extends IrcPlugin {
     private boolean doAutoJoin=true;
     private boolean doAutoReconnect=true;
+    private int timer_keepalive=0;
     private ArrayList<String> channels = new ArrayList<String>();
         
     public void join(String channelstr){
@@ -78,10 +79,8 @@ public class Plugin_autologin extends IrcPlugin {
                 }
                 break;
             case DISCONNECTED:
-               if(doAutoReconnect){
-                   System.out.println("autologin: nonfatal disconnect - autoreconnecting...");
-                   bot.connect();
-               }
+               System.out.println("autologin: disconnected");
+               //we could reconnect here, but we need to handle this multiple times, not just on state change. see TICK
                break;
         }
         return IrcEventAction.CONTINUE;
@@ -122,6 +121,16 @@ public class Plugin_autologin extends IrcPlugin {
                 bot.session.disconnect();
                 saveConfig();
                 break;
+            case TICK:
+                timer_keepalive+=1;
+                if(timer_keepalive==20){
+                    timer_keepalive=0;
+                    bot.session.sendKeepalive();
+                    if(doAutoReconnect && bot.state==IrcState.DISCONNECTED){
+                        System.out.println("autologin: nonfatal disconnect - autoreconnecting...");
+                        bot.connect();
+                    }
+                }
         }
         
         return IrcEventAction.CONTINUE;
@@ -147,7 +156,7 @@ public class Plugin_autologin extends IrcPlugin {
     
     public Plugin_autologin(){
         name="autologin";
-        version="1.0";
+        version="2.0";
         description="Performs automatic connection, login, and channel join operations.";
         priority=IrcPluginPriority.RAW;
         
