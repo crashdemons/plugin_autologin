@@ -17,6 +17,7 @@ public class Plugin_autologin extends IrcPlugin {
     private boolean doAutoJoin=true;
     private boolean doAutoReconnect=true;
     private int timer_keepalive=0;
+    private int timer_nickwait=0;
     private ArrayList<String> channels = new ArrayList<String>();
         
     public void join(String channelstr){
@@ -42,6 +43,7 @@ public class Plugin_autologin extends IrcPlugin {
     
     public IrcEventAction handleCommand(IrcEvent event,IrcState state,IrcCommand ic) throws Exception{
         if(ic.type.equals("PING")) pong(ic.parameters.get(0));
+        boolean do_quit=false;
         if(state==IrcState.LOGIN_WAIT){
             IrcLoginState check = session.logincheck(ic);
             switch(check)
@@ -50,15 +52,23 @@ public class Plugin_autologin extends IrcPlugin {
                     bot.updateState(IrcState.LOGGED_IN);
                     break;
                 case FAILURE:
-                    System.out.println("autologin: fatal response received - login failed");
-                    bot.quit();
+                    System.out.println("autologin: login failed");
+                    do_quit=true;
                     break;
             }
         }
         if(session.isFatalCommand(ic)){
-            System.out.println("autologin: fatal command received - quitting.");
-            bot.quit();
+            if(ic.type.equals("433")){//nickname in use
+                System.out.println("autologin: nickname in use - retry with incremental delay");
+                timer_nickwait+=60*2;
+                bot.disconnect();
+                do_quit=false;
+            }else{
+                System.out.println("autologin: fatal command received");
+                do_quit=true;
+            }
         }
+        if(do_quit) bot.quit();
         return IrcEventAction.CONTINUE;
     }
     public IrcEventAction handleStateChange(IrcEvent event,IrcState state) throws Exception{
@@ -69,6 +79,7 @@ public class Plugin_autologin extends IrcPlugin {
                bot.updateState(IrcState.LOGIN_WAIT);
                break;
             case LOGGED_IN://TODO: send userinit to capture full origin string for self!
+                timer_nickwait=0;
                 System.out.println("autologin: logged in.");
                 System.out.println("autologin: retrieving self origin string...");
                 im(session.account.nick,"++autologin-userinit++");
@@ -123,7 +134,7 @@ public class Plugin_autologin extends IrcPlugin {
                 break;
             case TICK:
                 timer_keepalive+=1;
-                if(timer_keepalive==20){
+                if(timer_keepalive==(20+timer_nickwait)){
                     timer_keepalive=0;
                     bot.session.sendKeepalive();
                     if(doAutoReconnect && bot.state==IrcState.DISCONNECTED){
@@ -156,7 +167,7 @@ public class Plugin_autologin extends IrcPlugin {
     
     public Plugin_autologin(){
         name="autologin";
-        version="2.0";
+        version="2.1";
         description="Performs automatic connection, login, and channel join operations.";
         priority=IrcPluginPriority.RAW;
         
