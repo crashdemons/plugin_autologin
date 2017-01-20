@@ -80,7 +80,8 @@ public class Plugin_autologin extends IrcPlugin {
                break;
             case LOGGED_IN://TODO: send userinit to capture full origin string for self!
                 timer_nickwait=0;
-                System.out.println("autologin: logged in.");
+                System.out.println("autologin: logged in, identifying...");
+                session.identify();
                 System.out.println("autologin: retrieving self origin string...");
                 im(session.account.nick,"++autologin-userinit++");
                 if(doAutoJoin){
